@@ -1,6 +1,6 @@
 use crate::log::LogStructure;
 use tokio::fs::{File, read_dir};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, SeekFrom, AsyncSeekExt};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use bincode::{serialize, deserialize};
@@ -14,14 +14,14 @@ pub async fn log_archiver(mut rx: tokio::sync::mpsc::Receiver<LogStructure>) {
         .await
         .unwrap();
 
-    let mut total_len: u16 = 0;
-    const MAX_CHUNK_SIZE: u16 = 1000;
+    let mut total_len: u32 = 0;
+    const MAX_CHUNK_SIZE: u32 = 100000;
 
     tokio::spawn(async move {
         while let Some(log) = rx.recv().await {
             let encoding = serialize(&log).unwrap();
             let encoding_length = encoding.len();
-            total_len += 8 as u16 + encoding_length as u16;
+            total_len += 8 as u32 + encoding_length as u32;
             file.write_all(&(encoding_length as u64).to_le_bytes())
                 .await
                 .unwrap();
@@ -50,6 +50,8 @@ pub async fn log_archiver(mut rx: tokio::sync::mpsc::Receiver<LogStructure>) {
 async fn get_checkpoints() -> HashMap<String, u64> {
     let mut checkpoint_file = File::options()
         .create(true)
+        .read(true)
+        .write(true)
         .open("./appendlogs/checkpoint")
         .await
         .unwrap();
@@ -57,6 +59,7 @@ async fn get_checkpoints() -> HashMap<String, u64> {
     let mut contents = Vec::new();
     checkpoint_file.read_to_end(&mut contents).await.unwrap();
     let dsrld = deserialize(&contents);
+    checkpoint_file.shutdown().await.unwrap();
     if let Ok(ret) = dsrld {
         ret
     } else {
@@ -72,6 +75,7 @@ async fn set_checkpoints(map: &HashMap<String, u64>) {
         .unwrap();
     let srld = serialize(map).unwrap();
     checkpoint_file.write_all(&srld).await.unwrap();
+    checkpoint_file.shutdown().await.unwrap();
 }
 
 pub async fn get_all_logs() -> HashMap<String, u64> {
@@ -90,7 +94,27 @@ pub async fn get_all_logs() -> HashMap<String, u64> {
 }
 
 async fn process_logs(filename: &String, seek_start: u64) {
-    println!("got value {} , {}", filename, seek_start);
+    let mut logfile = File::options()
+        .read(true)
+        .open(format!("./appendlogs/{}", filename))
+        .await
+        .unwrap();
+    logfile.seek(SeekFrom::Start(seek_start)).await.unwrap();
+    loop {
+        let mut log_size_bytes = [0; 8];
+        match logfile.read_exact(&mut log_size_bytes).await {
+            Ok(_) => {},
+            Err(ref e) if e.kind() == tokio::io::ErrorKind::UnexpectedEof => break,
+            Err(e) => panic!("{}", e)
+        }
+
+        let log_size = u64::from_le_bytes(log_size_bytes);
+        let mut log_bytes = vec![0; log_size as usize];
+        logfile.read_exact(&mut log_bytes).await.unwrap();
+
+        let log: LogStructure = deserialize(&log_bytes).unwrap();
+        println!("Read log: {:?}", log);
+    }
 }
 pub async fn log_processor() {
     tokio::spawn(async move {
@@ -101,7 +125,6 @@ pub async fn log_processor() {
             for (key, value) in logfiles {
                 if !checkpoint.contains_key(&key) || checkpoint.get(&key).unwrap().lt(&value) {
                     let v = checkpoint.get(&key).unwrap_or(&0);
-                    println!("{} vs {}", *v, value);
                     process_logs(&key, *v).await;
                     checkpoint.insert(key, value);
                     set_checkpoints(&checkpoint).await;
