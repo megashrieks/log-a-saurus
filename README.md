@@ -12,11 +12,11 @@ stop the image using `docker compose down`
 ## Log Structure
 ```
 {
-	"level": string,
-	"message": string,
+    "level": string,
+    "message": string,
     "resourceId": string,
-	"timestamp": "<timestamp>", // example: "2023-09-15T08:00:00Z"
-	"traceId": string,
+    "timestamp": "<timestamp>", // example: "2023-09-15T08:00:00Z"
+    "traceId": string,
     "spanId": string,
     "commit": string,
     "metadata": {
@@ -44,7 +44,7 @@ Example Query Body
 ```json
 {
     "level": {"equals": "error"},
-    "message": {"like": "failed"},
+    "message": {"like": "Failed%"},
     "pagination": { "top": 100, "offset": 0}
 }
 ```
