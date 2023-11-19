@@ -10,7 +10,7 @@ run the image using `docker compose up`
 stop the image using `docker compose down`
 
 ## Log Structure
-```json
+```
 {
 	"level": string,
 	"message": string,
@@ -43,15 +43,15 @@ Pagination should be done through top and offset properties
 Example Query Body
 ```json
 {
-	"level": {"equals": "error"},
-	"message": {"like": "failed"},
+    "level": {"equals": "error"},
+    "message": {"like": "failed"},
     "pagination": { "top": 100, "offset": 0}
 }
 ```
 Complete Example
 ```json
 {
-	"level": {"equals": "error"},
+    "level": {"equals": "error"},
     "message": {"like": "Failed%"},
     "resourceId": {"equals": "server-1234"},
     "commit": {"like": "%534%"},
@@ -75,7 +75,7 @@ Querying:
 curl --location 'localhost:3000/query' \
 --header 'Content-Type: application/json' \
 --data '{
-	"level": {"equals": "error"},
+    "level": {"equals": "error"},
     "message": {"like": "Failed%"},
     "resourceId": {"equals": "server-1234"},
     "commit": {"like": "%534%"},
@@ -96,11 +96,11 @@ Insertion:
 curl --location 'localhost:3000/' \
 --header 'Content-Type: application/json' \
 --data '{
-	"level": "error",
-	"message": "Failed to connect to DB",
+    "level": "error",
+    "message": "Failed to connect to DB",
     "resourceId": "server-1234",
-	"timestamp": "2023-09-15T08:00:00Z",
-	"traceId": "abc-xyz-123",
+    "timestamp": "2023-09-15T08:00:00Z",
+    "traceId": "abc-xyz-123",
     "spanId": "span-456",
     "commit": "5e5342f",
     "metadata": {

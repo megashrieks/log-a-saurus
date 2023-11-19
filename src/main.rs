@@ -31,7 +31,7 @@ impl AppState {
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() {
-    dotenv().expect(".env file not found");
+    let _ = dotenv();
     let path = "./appendlogs";
     tokio::fs::create_dir_all(&path).await.unwrap();
 
