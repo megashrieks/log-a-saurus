@@ -1,0 +1,21 @@
+config:
+  target: 'http://localhost:3000'
+  phases:
+    - duration: 60
+      arrivalRate: 10000
+
+scenarios:
+  - flow:
+      - post:
+          url: '/'
+          json:
+            level: 'error'
+            message: "Failed to connect to DB"
+            resourceId: "server-1234"
+            timestamp: "2023-11-18T19:20:23.920Z"
+            traceId: "abc-xyz-123"
+            spanId: "span-456"
+            commit: "5e5342f"
+            metadata:
+              parentResourceId: "server-0987"
+

@@ -7,20 +7,23 @@ mod db;
 use std::sync::Arc;
 use config::get_env;
 use dotenvy::dotenv;
+use log_processor::ingestion_server::create_new_log;
+use query_client::query_resolver;
 use tokio::sync::mpsc;
-use sqlx::postgres::PgPoolOptions;
+use sqlx::{postgres::PgPoolOptions, Postgres, Pool};
 
-use axum;
+use axum::{self, Router, routing::post};
 
 
 pub struct AppState {
     tx: mpsc::Sender<log::LogStructure>,
+    pool: Arc<Pool<Postgres>>
 }
 
 impl AppState {
-    fn new(tx: mpsc::Sender<log::LogStructure>) -> AppState {
+    fn new(tx: mpsc::Sender<log::LogStructure>, pool: Arc<Pool<Postgres>>) -> AppState {
         return AppState {
-            tx
+            tx, pool
         }
     }
 }
@@ -39,13 +42,17 @@ async fn main() {
         );
 
     let (tx, rx): (mpsc::Sender<log::LogStructure>, mpsc::Receiver<log::LogStructure>) = mpsc::channel(1000000);
-    let state: AppState = AppState::new(tx);
+    let state: Arc<AppState> = Arc::new(AppState::new(tx, pool.clone()));
+
+    let app = Router::new()
+        .route("/", post(create_new_log))
+        .route("/query", post(query_resolver))
+        .with_state(state);
+
     let _ = tokio::join!(
         axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
         .serve(
-            log_processor::ingestion_server::router()
-            .with_state(Arc::new(state))
-            .into_make_service()
+            app.into_make_service()
         ),
         log_processor::ingestion_worker::log_archiver(rx),
         log_processor::ingestion_worker::log_processor(pool)

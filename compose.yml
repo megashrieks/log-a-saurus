@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres
+    restart: always
+
+    ports:
+      - 5432:5432
+
+    environment:
+      POSTGRES_PASSWORD: 'password'
+      POSTGRES_USERNAME: 'postgres'
+
+    volumes:
+      - ./migration:/docker-entrypoint-initdb.d
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+
+  app:
+    volumes:
+      - /tmp/appendlogs:/appendlogs
+    container_name: log-server
+    build: .
+
+    depends_on:
+      - db
+    ports:
+      - 3000:3000
+    links:
+      - db
+
+    environment:
+      PORT: 8000
+      MAX_LOG_CHUNK_SIZE: 100000000
+      APPEND_LOGS_PATH: 'appendlogs'
+      DB_URL: 'postgres://postgres:password@db:5432/postgres'

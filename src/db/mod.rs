@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc, TimeZone};
+use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction, Pool, Row};
 
 use crate::query_client::Query;
@@ -12,6 +12,7 @@ use crate::{
 };
 
 pub async fn insert_logs(tx: &mut Transaction<'_, Postgres>, loglist: Vec<LogStructure>) {
+    // TODO: Replace this with something less terrible
     let insertable = convert_logs_to_sql(loglist);
     let q = format!(r#"
             insert into public.logs ("level", "message", "resource_id", "timestamp", "trace_id", "span_id", "commit", "parent_resource_id") values {}
@@ -20,6 +21,7 @@ pub async fn insert_logs(tx: &mut Transaction<'_, Postgres>, loglist: Vec<LogStr
 }
 
 fn convert_logs_to_sql(loglist: Vec<LogStructure>) -> String {
+    // TODO: Replace this with something less terrible
     let mut sql = String::new();
     for log in loglist {
         sql += &format!(
@@ -34,7 +36,6 @@ fn convert_logs_to_sql(loglist: Vec<LogStructure>) -> String {
 
 pub fn create_sql_conditions(query: query_client::Query) -> String {
     let mut conditions: Vec<String> = Vec::new();
-
 
     if let Some(level) = query.level {
         conditions.push(match level {
@@ -78,11 +79,13 @@ pub fn create_sql_conditions(query: query_client::Query) -> String {
         });
     }
     
-    if let Some(parent_resource_id) = query.parent_resource_id {
-        conditions.push(match parent_resource_id {
-            LikeEqual::Equal(EqualOp{equals}) => format!("parent_resource_id = '{}'", equals),
-            LikeEqual::Like(LikeOp{like}) => format!("parent_resource_id like '{}'", like)
-        });
+    if let Some(metadata) = query.metadata {
+        if let Some(parent_resource_id) = metadata.parent_resource_id {
+            conditions.push(match parent_resource_id {
+                LikeEqual::Equal(EqualOp{equals}) => format!("parent_resource_id = '{}'", equals),
+                LikeEqual::Like(LikeOp{like}) => format!("parent_resource_id like '{}'", like)
+            });
+        }
     }
 
     if let Some(timestamp) = query.timestamp {
@@ -91,18 +94,29 @@ pub fn create_sql_conditions(query: query_client::Query) -> String {
             EqualBetween::Between(BetweenOp{from, to}) => format!("timestamp between '{}' AND '{}'", from, to)
         });
     }
-
-    conditions.join("AND")
+    conditions.join(" AND ")
 
 }
 
 
 
 pub async fn query_logs(pool: &Pool<Postgres>, query: Query) -> Vec<LogStructure> {
-    let condition_string = create_sql_conditions(query);
+    let top = query.pagination.top;
+    let offset = query.pagination.offset;
+    let mut condition_string = create_sql_conditions(query);
 
-    let result = sqlx::query(&format!("select * from logs where {}", condition_string))
-        .fetch_all(pool)
+    if condition_string.len() == 0 {
+        condition_string = "true=true".to_string();
+    }
+
+    let query = format!("select * from logs where {} limit {} offset {}",
+                        condition_string,
+                        top,
+                        offset
+                    );
+    println!("Query: {}", query);
+
+    let result = sqlx::query(&query).fetch_all(pool)
         .await.unwrap();
     let ret = result.iter().map(|r| LogStructure {
         level: r.get::<String, _>("level"),
@@ -111,11 +125,7 @@ pub async fn query_logs(pool: &Pool<Postgres>, query: Query) -> Vec<LogStructure
         span_id: r.get::<String, _>("span_id"),
         resource_id: r.get::<String, _>("resource_id"),
         commit: r.get::<String, _>("commit"),
-        timestamp: DateTime::parse_from_str(
-                r.get::<String, _>("timestamp").as_str(),
-                "%Y %b %d %H:%M:%S%.3f %z"
-            ).unwrap()
-            .into(),
+        timestamp: r.get::<DateTime<Utc>, _>("timestamp").into(),
         metadata: crate::log::LogMetadata {
             parent_resource_id: r.get::<String, _>("parent_resource_id")
         }
