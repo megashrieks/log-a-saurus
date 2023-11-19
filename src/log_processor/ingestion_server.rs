@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashMap};
 
 use axum::{
     routing::post,
@@ -15,6 +15,6 @@ pub fn router() -> Router<Arc<AppState>> {
 
 async fn create_new_log(State(state): State<Arc<AppState>>, Json(body): Json<log::LogStructure>) {
     let tx = &state.clone().tx;
-
+    println!("received: {:?}", body);
     tx.send(body).await.unwrap();
 }
